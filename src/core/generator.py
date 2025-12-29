@@ -5,8 +5,8 @@ Generates valid Sudoku puzzles of varying difficulty
 
 import random
 from typing import List, Tuple
-from sudoku_board import SudokuBoard
-from algorithms import BacktrackingSolver
+from src.core.board import SudokuBoard
+from src.solvers.backtracking import BacktrackingSolver
 
 
 class PuzzleGenerator:

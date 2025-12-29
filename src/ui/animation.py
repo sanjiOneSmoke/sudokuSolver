@@ -7,7 +7,7 @@ import time
 from typing import Generator, Optional, Callable, List
 from dataclasses import dataclass
 from enum import Enum
-from algorithms import SolveStep, StepType
+from src.solvers.base import SolveStep, StepType
 
 
 class AnimationState(Enum):
