@@ -78,6 +78,7 @@ class SudokuGame:
         self.animation.on_state_change = self._on_animation_state_change
         self.animation.on_finished = self._on_animation_finished
         self.animation_timer_id = None
+        self.animation_board_state: Dict[Tuple[int, int], int] = {}  # Track board state during animation
         
         # Solvers
         self.solvers = {
@@ -381,8 +382,12 @@ class SudokuGame:
             messagebox.showinfo("Compare", "Please generate a puzzle first!")
             return
         
+        # Calculate timeout based on board size
+        timeout_map = {9: 10, 16: 30, 25: 120}  # 9x9: 10s, 16x16: 30s, 25x25: 2min
+        timeout_seconds = timeout_map.get(self.board_size, 10)
+        
         # Show loading message
-        self.status_label.config(text="Comparing algorithms... (max 5s per algorithm)")
+        self.status_label.config(text=f"Comparing algorithms... (max {timeout_seconds}s per algorithm)")
         self.root.update()
         
         import threading
@@ -415,7 +420,6 @@ class SudokuGame:
         
         # Collect results with timeout
         results = []
-        timeout_seconds = 5  # 5 second timeout per algorithm
         
         for name, solver in self.solvers.items():
             result_queue = queue.Queue()
@@ -549,6 +553,16 @@ class SudokuGame:
             messagebox.showinfo("Animate", "Please generate a puzzle first!")
             return
         
+        # Reset board to original state for animation
+        self.current_board = self.original_board.copy()
+        self._create_board_ui()
+        
+        # Initialize animation board state tracking
+        self.animation_board_state = {}
+        for row in range(self.board_size):
+            for col in range(self.board_size):
+                self.animation_board_state[(row, col)] = self.current_board[row, col]
+        
         solver = self.solvers[self.algo_var.get()]
         step_gen = solver.solve_with_steps(self.current_board.copy())
         
@@ -590,18 +604,39 @@ class SudokuGame:
                     entry.config(bg=color, state='normal')
                     
                     if step.step_type == StepType.BACKTRACK:
-                        # Clear the cell on backtrack
+                        # Clear the cell on backtrack and update state
                         entry.delete(0, tk.END)
-                        self.root.after(200, lambda r=step.row, c=step.col: self._reset_cell_color(r, c))
-                    elif step.step_type in (StepType.ASSIGN, StepType.PROPAGATE, StepType.TRY):
+                        self.animation_board_state[(step.row, step.col)] = 0
+                        # Keep backtrack color visible longer
+                        self.root.after(300, lambda r=step.row, c=step.col: self._reset_cell_color(r, c))
+                    
+                    elif step.step_type == StepType.TRY:
+                        # Show TRY value with distinctive color - don't reset immediately
                         if step.value is not None:
                             entry.delete(0, tk.END)
                             entry.insert(0, str(step.value))
-                        # Reset color after a short delay for assign/propagate
-                        if step.step_type in (StepType.ASSIGN, StepType.PROPAGATE):
-                            self.root.after(150, lambda r=step.row, c=step.col: self._reset_cell_color(r, c))
+                        # TRY color stays until ASSIGN or BACKTRACK
+                    
+                    elif step.step_type == StepType.ASSIGN:
+                        # Assign value and update state
+                        if step.value is not None:
+                            entry.delete(0, tk.END)
+                            entry.insert(0, str(step.value))
+                            self.animation_board_state[(step.row, step.col)] = step.value
+                        # Reset to normal color after delay
+                        self.root.after(150, lambda r=step.row, c=step.col: self._reset_cell_color(r, c))
+                    
+                    elif step.step_type == StepType.PROPAGATE:
+                        # Propagate shows constraint deduction
+                        if step.value is not None:
+                            entry.delete(0, tk.END)
+                            entry.insert(0, str(step.value))
+                            self.animation_board_state[(step.row, step.col)] = step.value
+                        self.root.after(150, lambda r=step.row, c=step.col: self._reset_cell_color(r, c))
+                    
                     elif step.step_type == StepType.REVISE:
-                        # REVISE just shows domain reduction, don't change value
+                        # REVISE shows domain reduction - flash the cell briefly
+                        # Don't change value, just show that domain was reduced
                         self.root.after(100, lambda r=step.row, c=step.col: self._reset_cell_color(r, c))
     
     def _reset_cell_color(self, row: int, col: int):
